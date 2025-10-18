@@ -19,7 +19,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000; // Use environment port or 3000
 const TEMP_DIR = path.join(__dirname, 'temp');
 const serverStartTime = new Date();
 
@@ -216,5 +216,5 @@ app.get('/status', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Server on http://localhost:${PORT}`);
+  console.log(`Server is running on port ${PORT}`);
 });
