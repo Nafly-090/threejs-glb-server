@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Operations Interface</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #00ff41; /* Hacker Green */
+            --error-color: #ff4141;   /* Bright Red */
+            --warn-color: #f7a80a;    /* Amber */
+            --info-color: #00e5ff;    /* Cyan */
+            --dark-bg: #0d0d0d;
+            --panel-bg: rgba(10, 25, 10, 0.4);
+        }
+
+        body {
+            font-family: 'Roboto Mono', monospace;
+            background-color: var(--dark-bg);
+            color: #e0e0e0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+        
+        #matrix-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+        }
+
+        #status-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: auto auto auto;
+            gap: 20px 30px;
+            position: relative;
+            background-color: var(--panel-bg);
+            border: 1px solid rgba(0, 255, 65, 0.3);
+            padding: 30px 40px;
+            border-radius: 8px;
+            box-shadow: 0 0 35px rgba(0, 255, 65, 0.15), inset 0 0 15px rgba(0, 255, 65, 0.1);
+            width: 90%;
+            max-width: 800px;
+            backdrop-filter: blur(6px);
+            z-index: 1;
+        }
+
+        h1 {
+            grid-column: 1 / -1; /* Span full width */
+            text-align: center;
+            margin: 0 0 10px 0;
+            color: #fff;
+            font-size: 1.8em;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            text-shadow: 0 0 8px var(--primary-color);
+        }
+
+        .status-item {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 15px;
+            border-left: 3px solid var(--primary-color);
+        }
+        
+        .status-label {
+            display: block;
+            font-size: 0.8em;
+            color: #888;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .status-text {
+            font-weight: bold;
+            font-size: 1.2em;
+        }
+        
+        .status-text.online { color: var(--primary-color); }
+        .status-text.offline { color: var(--error-color); }
+        .status-text.checking { color: var(--warn-color); animation: pulse 1.5s infinite; }
+        .status-text.info { color: var(--info-color); }
+
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+
+        #log-container {
+            grid-column: 1 / -1;
+            margin-top: 10px;
+            border: 1px solid rgba(0, 255, 65, 0.2);
+            background: rgba(0,0,0,0.3);
+        }
+        
+        #log-header {
+            padding: 8px 12px;
+            background: rgba(0, 255, 65, 0.1);
+            color: var(--primary-color);
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        #log-output {
+            height: 120px;
+            overflow-y: auto;
+            padding: 10px;
+            font-size: 0.9em;
+            line-height: 1.6;
+        }
+        
+        #log-output div { white-space: nowrap; }
+        .log-time { color: #777; margin-right: 10px; }
+        .log-info { color: #ccc; }
+        .log-success { color: var(--primary-color); }
+        .log-error { color: var(--error-color); }
+
+        /* Custom scrollbar for the log */
+        #log-output::-webkit-scrollbar { width: 5px; }
+        #log-output::-webkit-scrollbar-track { background: transparent; }
+        #log-output::-webkit-scrollbar-thumb { background: var(--primary-color); }
+    </style>
+</head>
+<body>
+    <canvas id="matrix-canvas"></canvas>
+
+    <div id="status-container">
+        <h1>SYSTEM OPERATIONS INTERFACE</h1>
+
+        <div class="status-item">
+            <span class="status-label">API Server Connection</span>
+            <span class="status-text checking" id="server-status-text">INITIALIZING...</span>
+        </div>
+
+        <div class="status-item">
+            <span class="status-label">Latency (Ping)</span>
+            <span class="status-text info" id="latency-text">-- ms</span>
+        </div>
+
+        <div class="status-item">
+            <span class="status-label">Client Network</span>
+            <span class="status-text checking" id="network-status-text">PROBING...</span>
+        </div>
+
+        <div class="status-item">
+            <span class="status-label">Last Check</span>
+            <span class="status-text info" id="last-check-text">--:--:--</span>
+        </div>
+
+        <div class="status-item" style="grid-column: 1 / -1;">
+            <span class="status-label">Server Uptime</span>
+            <span class="status-text info" id="uptime-text">-- days, --:--:--</span>
+        </div>
+        
+        <div id="log-container">
+            <div id="log-header">> Live Activity Log</div>
+            <div id="log-output"></div>
+        </div>
+    </div>
+
+    <script>
+        // --- MATRIX BACKGROUND SCRIPT (no changes) ---
+        const canvas = document.getElementById('matrix-canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        const characters = 'アァカサタナハマヤャラワガザダバパイィキシチニヒミリヰギジヂビピウゥクスツヌフムユュルグズブプエェケセテネヘメレヱゲゼデベペオォコソトノホモヨョロヲゴゾドボポヴッンABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        const fontSize = 16;
+        const columns = Math.floor(canvas.width / fontSize);
+        const drops = Array(columns).fill(1);
+        function drawMatrix() {
+            ctx.fillStyle = 'rgba(13, 13, 13, 0.05)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--primary-color');
+            ctx.font = fontSize + 'px monospace';
+            for (let i = 0; i < drops.length; i++) {
+                const text = characters.charAt(Math.floor(Math.random() * characters.length));
+                ctx.fillText(text, i * fontSize, drops[i] * fontSize);
+                if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) drops[i] = 0;
+                drops[i]++;
+            }
+        }
+        setInterval(drawMatrix, 33);
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+
+        // --- ENHANCED SERVER STATUS SCRIPT ---
+        const serverStatusText = document.getElementById('server-status-text');
+        const networkStatusText = document.getElementById('network-status-text');
+        const latencyText = document.getElementById('latency-text');
+        const lastCheckText = document.getElementById('last-check-text');
+        const uptimeText = document.getElementById('uptime-text');
+        const logOutput = document.getElementById('log-output');
+        
+        const SERVER_URL = 'http://localhost:3000/status';
+        const POLLING_INTERVAL = 5000;
+        let serverStartDate = null;
+        let uptimeInterval = null;
+
+        function setStatus(element, text, status) {
+            element.textContent = text;
+            element.className = 'status-text ' + status;
+        }
+
+        function addLogMessage(message, type = 'info') {
+            const time = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.innerHTML = `<span class="log-time">${time}</span><span class="log-${type}">${message}</span>`;
+            logOutput.appendChild(logEntry);
+            
+            // Auto-scroll to bottom and limit log length
+            if (logOutput.children.length > 50) {
+                logOutput.removeChild(logOutput.firstChild);
+            }
+            logOutput.scrollTop = logOutput.scrollHeight;
+        }
+
+        function formatUptime(startDate) {
+            const now = new Date();
+            const diff = now.getTime() - startDate.getTime();
+            
+            let seconds = Math.floor(diff / 1000);
+            let minutes = Math.floor(seconds / 60);
+            let hours = Math.floor(minutes / 60);
+            const days = Math.floor(hours / 24);
+
+            hours %= 24;
+            minutes %= 60;
+            seconds %= 60;
+
+            return `${days} days, ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        }
+        
+        function updateUptimeDisplay() {
+            if (serverStartDate) {
+                uptimeText.textContent = formatUptime(serverStartDate);
+            }
+        }
+
+        async function checkServerStatus() {
+            setStatus(serverStatusText, 'CONNECTING...', 'checking');
+            addLogMessage('Initializing connection test...', 'info');
+            lastCheckText.textContent = new Date().toLocaleTimeString();
+            
+            if (!navigator.onLine) {
+                setStatus(serverStatusText, 'OFFLINE', 'offline');
+                addLogMessage('Network link down. Cannot establish connection.', 'error');
+                return;
+            }
+
+            const startTime = performance.now();
+            try {
+                const response = await fetch(SERVER_URL, { signal: AbortSignal.timeout(4000) });
+                const endTime = performance.now();
+                const duration = Math.round(endTime - startTime);
+                setStatus(latencyText, `${duration} ms`, 'online');
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    setStatus(serverStatusText, 'CONNECTED', 'online');
+                    addLogMessage(`Success. Ping: ${duration}ms`, 'success');
+
+                    if (data.startTime && !serverStartDate) {
+                        serverStartDate = new Date(data.startTime);
+                        updateUptimeDisplay();
+                        if(uptimeInterval) clearInterval(uptimeInterval);
+                        uptimeInterval = setInterval(updateUptimeDisplay, 1000);
+                    }
+                } else {
+                    setStatus(serverStatusText, `ERROR [${response.status}]`, 'offline');
+                    addLogMessage(`Host responded with non-2xx status: ${response.status}`, 'error');
+                }
+            } catch (error) {
+                setStatus(serverStatusText, 'UNREACHABLE', 'offline');
+                setStatus(latencyText, 'TIMEOUT', 'offline');
+                addLogMessage(`Connection failed. Host unreachable. (${error.name})`, 'error');
+            }
+        }
+        
+        function updateNetworkStatus() {
+            if (navigator.onLine) {
+                setStatus(networkStatusText, 'ONLINE', 'online');
+            } else {
+                setStatus(networkStatusText, 'OFFLINE', 'offline');
+            }
+        }
+        
+        window.addEventListener('online', updateNetworkStatus);
+        window.addEventListener('offline', updateNetworkStatus);
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            updateNetworkStatus();
+            checkServerStatus();
+            setInterval(checkServerStatus, POLLING_INTERVAL);
+            addLogMessage('System Monitor Initialized. Standby for polling.', 'info');
+        });
+    </script>
+</body>
+</html>
