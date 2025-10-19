@@ -167,7 +167,7 @@ app.post('/generate-text', async (req, res) => {
           console.log('Export completed. gltf length:', gltf.byteLength || 'N/A');
           fs.writeFileSync(filepath, Buffer.from(gltf));
           console.log('File written');
-          const serverUrl = `https://pzgj4j-3000.csb.app/`; 
+          const serverUrl = `https://pzgj4j-3000.csb.app`; 
           const uri = `${serverUrl}/temp/${filename}`;
           res.json({ uri });
         } catch (writeError) {
