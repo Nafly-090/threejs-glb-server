@@ -24,7 +24,23 @@ const TEMP_DIR = path.join(__dirname, 'temp');
 const serverStartTime = new Date();
 
 app.use(express.json());
-app.use('/temp', express.static(TEMP_DIR));
+
+app.use('/temp', (req, res, next) => {
+  // Set CORS headers to allow requests from any origin
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET');
+  res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With,content-type');
+
+  // Clear the restrictive Content-Security-Policy header
+  res.removeHeader('Content-Security-Policy');
+  
+  // We also explicitly set the correct Content-Type for .glb files
+  // This helps the browser understand what it's receiving.
+  res.setHeader('Content-Type', 'model/gltf-binary');
+
+  // Let the next middleware (express.static) handle the file sending
+  next();
+}, express.static(TEMP_DIR));
 // Add this line to your server.js
 
 
@@ -38,7 +54,7 @@ app.post('/generate-text', async (req, res) => {
   }
 
   try {
-    const filename = `label-${text}.glb`;
+    const filename = `label.glb`;
     const filepath = path.join(TEMP_DIR, filename);
     console.log('Starting generation for text:', text, 'depth:', depth);
 
