@@ -167,7 +167,8 @@ app.post('/generate-text', async (req, res) => {
           console.log('Export completed. gltf length:', gltf.byteLength || 'N/A');
           fs.writeFileSync(filepath, Buffer.from(gltf));
           console.log('File written');
-          const uri = `http://localhost:${PORT}/temp/${filename}`;
+          const serverUrl = `https://pzgj4j-3000.csb.app/`; 
+          const uri = `${serverUrl}/temp/${filename}`;
           res.json({ uri });
         } catch (writeError) {
           console.error('Write error:', writeError);
@@ -218,3 +219,7 @@ app.get('/status', (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
+
+
+
+
