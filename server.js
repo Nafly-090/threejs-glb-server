@@ -22,7 +22,7 @@ function generateUniqueFilename(text) {
   const sanitizedText = text.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   const hash = randomBytes(4).toString('hex');
   const shortText = sanitizedText.substring(0, 30);
-  return `label-${shortText}-${hash}.glb`;
+  return `label.glb`;
 }
 
 const __filename = fileURLToPath(import.meta.url);
