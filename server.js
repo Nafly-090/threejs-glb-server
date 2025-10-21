@@ -89,8 +89,11 @@ app.post('/generate-text', async (req, res) => {
           const filename = generateUniqueFilename(text); // <-- FIX #2: Function is now defined
           const buffer = Buffer.from(gltf);
 
-          const blob = await put(filename, buffer, { access: 'public' });
-          
+          const blob = await put(filename, buffer, {
+            access: 'public',
+            addRandomSuffix: false, // Ensure the filename is not changed
+            token: process.env.BLOB_READ_WRITE_TOKEN // Provide the token to allow overwriting
+          });          
           console.log('File uploaded. URL:', blob.url);
           res.json({ uri: blob.url }); // <-- FIX #1: Use blob.url
         } catch (uploadError) {
