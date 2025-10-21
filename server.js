@@ -18,12 +18,12 @@ import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
 
 // --- HELPER FUNCTION FOR UNIQUE FILENAMES ---
-function generateUniqueFilename(text) {
-  const sanitizedText = text.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-  const hash = randomBytes(4).toString('hex');
-  const shortText = sanitizedText.substring(0, 30);
-  return `label.glb`;
-}
+// function generateUniqueFilename(text) {
+//   const sanitizedText = text.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+//   const hash = randomBytes(4).toString('hex');
+//   const shortText = sanitizedText.substring(0, 30);
+//   return `label.glb`;
+// }
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -86,7 +86,7 @@ app.post('/generate-text', async (req, res) => {
     exporter.parse(scene, async (gltf) => {
         try {
           console.log('Export completed. Uploading to Vercel Blob...');
-          const filename = generateUniqueFilename(text); // <-- FIX #2: Function is now defined
+          const filename = "label.glb"; 
           const buffer = Buffer.from(gltf);
 
           const blob = await put(filename, buffer, {
