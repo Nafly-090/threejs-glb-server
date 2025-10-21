@@ -91,11 +91,10 @@ app.post('/generate-text', async (req, res) => {
 
           const blob = await put(filename, buffer, {
             access: 'public',
-            addRandomSuffix: false, // Ensure the filename is not changed
-            token: process.env.BLOB_READ_WRITE_TOKEN // Provide the token to allow overwriting
+            addRandomSuffix: false // Ensure the filename is not changed
           });          
           console.log('File uploaded. URL:', blob.url);
-          res.json({ uri: blob.url }); // <-- FIX #1: Use blob.url
+          res.json({ uri: blob.url }); 
         } catch (uploadError) {
           console.error('Upload error:', uploadError);
           res.status(500).json({ error: 'Failed to upload GLB file' });
