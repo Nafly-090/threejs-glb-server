@@ -1,227 +1,120 @@
 import express from 'express';
-import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import cors from 'cors'; 
+import cors from 'cors';
+import { put } from '@vercel/blob';
+import { randomBytes } from 'crypto';
 
-
-// vblob polyfill FIRST (before Three.js)
+// vblob polyfill
 import { Blob, FileReader } from 'vblob';
 globalThis.Blob = Blob;
 globalThis.FileReader = FileReader;
 globalThis.window = globalThis;
 
-// Import Three.js AFTER polyfills
+// Three.js imports
 import * as THREE from 'three';
 import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js';
 import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
 
+// --- HELPER FUNCTION FOR UNIQUE FILENAMES ---
+function generateUniqueFilename(text) {
+  const sanitizedText = text.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  const hash = randomBytes(4).toString('hex');
+  const shortText = sanitizedText.substring(0, 30);
+  return `label-${shortText}-${hash}.glb`;
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-app.use(cors()); // <-- ADD THIS LINE. This enables CORS for all routes.
-const PORT = process.env.PORT || 3000; // Use environment port or 3000
-const TEMP_DIR = path.join(__dirname, 'temp');
-const serverStartTime = new Date();
-
+app.use(cors());
+const PORT = process.env.PORT || 3000;
 app.use(express.json());
-
-app.use('/temp', express.static(TEMP_DIR));
-
 
 app.post('/generate-text', async (req, res) => {
   console.log('Request received:', req.body);
+  const { text, depth = 0.4, animate = true } = req.body;
 
-  const { text, depth = 0.4 ,animate = true} = req.body;  // Simplified: Only text required; depth defaults to slim 0.08
   if (!text || typeof text !== 'string') {
     return res.status(400).json({ error: 'Missing or invalid "text" in request body' });
   }
 
   try {
-    const filename = `label.glb`;
-    const filepath = path.join(TEMP_DIR, filename);
-    console.log('Starting generation for text:', text, 'depth:', depth);
-
-    if (!fs.existsSync(TEMP_DIR)) {
-      fs.mkdirSync(TEMP_DIR, { recursive: true });
-    }
-
-    // Load font
     console.log('Fetching font...');
     const fontUrl = 'https://threejs.org/examples/fonts/helvetiker_regular.typeface.json';
-    let font;
-    try {
-      const response = await fetch(fontUrl);
-      if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      const fontData = await response.json();
-      const loader = new FontLoader();
-      font = loader.parse(fontData);
-      console.log('Font created successfully');
-    } catch (fontError) {
-      console.error('Font loading error:', fontError);
-      throw new Error(`Font failed: ${fontError.message}`);
-    }
+    const response = await fetch(fontUrl);
+    if (!response.ok) throw new Error(`Font fetch failed: ${response.statusText}`);
+    const fontData = await response.json();
+    const font = new FontLoader().parse(fontData);
 
-    // Create geometry
     console.log('Creating geometry...');
     const scene = new THREE.Scene();
     const geometry = new TextGeometry(text, {
-      font: font,
-      size: 0.8,
-      depth: depth,  // Slim extrusion for clean 3D
-      curveSegments: 20,
-      bevelEnabled: true,
-      bevelThickness: 0.025,  // Enhanced: Crisper edges for attractiveness
-      bevelSize: 0.025,
-      bevelOffset: 0,
-      bevelSegments: 5
+      font: font, size: 0.8, depth: depth, curveSegments: 20,
+      bevelEnabled: true, bevelThickness: 0.025, bevelSize: 0.025,
+      bevelOffset: 0, bevelSegments: 5
     });
-    console.log('Geometry created with depth:', depth);
 
-    // Center geometry
     geometry.computeBoundingBox();
-    const boundingBox = geometry.boundingBox;
-    const centerOffsetX = -0.5 * (boundingBox.max.x - boundingBox.min.x);
-    const centerOffsetY = -0.5 * (boundingBox.max.y - boundingBox.min.y);
-    geometry.translate(centerOffsetX, centerOffsetY, 0);
-    console.log('Geometry centered');
+    const { max, min } = geometry.boundingBox;
+    geometry.translate(-0.5 * (max.x - min.x), -0.5 * (max.y - min.y), 0);
 
-    // Enhanced material: Added emissive for subtle glow
     const material = new THREE.MeshStandardMaterial({
-      color: 0x4a90e2,  // Vibrant blue
-      emissive: 0x4a90e2,  // Soft inner glow
-      emissiveIntensity: 0.2,  // Subtle, not overwhelming
-      roughness: 0.3,
-      metalness: 0.4  // Higher for metallic sheen
+      color: 0x4a90e2, emissive: 0x4a90e2, emissiveIntensity: 0.2,
+      roughness: 0.3, metalness: 0.4
     });
 
-    // Mesh with auto-scale for consistent visibility (based on text length)
     const textMesh = new THREE.Mesh(geometry, material);
-    textMesh.name = 'AnimatedText'; // <-- ADD THIS LINE
-    const textLength = text.length;
-    textMesh.scale.setScalar(1 / Math.sqrt(textLength / 10 + 1));  // Slight scale down for longer text
+    textMesh.scale.setScalar(1 / Math.sqrt(text.length / 10 + 1));
     scene.add(textMesh);
-    console.log('Mesh added with scale');
 
-    // Enhanced lights: Added side light for highlights/depth
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);  // Soft fill
-    scene.add(ambientLight);
-    const directionalLight1 = new THREE.DirectionalLight(0xffffff, 0.6);  // Front key
-    directionalLight1.position.set(1, 1, 1);
-    scene.add(directionalLight1);
-    const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.3);  // Side highlight
-    directionalLight2.position.set(-1, 0.5, 0.5);
-    scene.add(directionalLight2);
-
-
-
-    let animations = [];
     if (animate) {
       console.log('Creating animation...');
-
-      // 1. Create the keyframes for a full 360-degree rotation.
-      const rotation_times = [0, 30]; // Start at 0 seconds, end at 10 seconds
-      const rotation_values = [
-          0, 0, 0, 1, // Quaternion for 0 degrees (x, y, z, w)
-          0, 1, 0, 0  // Quaternion for 360 degrees (this will be normalized by three.js)
-      ];
-      
-      // To be precise, let's build it from Euler angles
+      const rotation_times = [0, 10]; // 10 second loop
       const startQuaternion = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, 0));
       const endQuaternion = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI * 2, 0));
-      
-      const quaternion_values = [
-          ...startQuaternion.toArray(),
-          ...endQuaternion.toArray()
-      ];
-
-      // 2. Create a track that targets the mesh's quaternion property.
-      //    The track name is now LOCAL ('.quaternion') because it will be
-      //    part of the mesh itself.
-      const track = new THREE.QuaternionKeyframeTrack(
-          '.quaternion',
-          rotation_times,
-          quaternion_values
-      );
-
-      // 3. Create the clip containing the track.
+      const quaternion_values = [...startQuaternion.toArray(), ...endQuaternion.toArray()];
+      const track = new THREE.QuaternionKeyframeTrack('.quaternion', rotation_times, quaternion_values);
       const clip = new THREE.AnimationClip('rotate', -1, [track]);
-
-      // 4. THIS IS THE KEY STEP: Attach the clip to the mesh's animations array.
       textMesh.animations.push(clip);
-
-      console.log('Animation clip created and attached to mesh');
     }
-
-  
-
-
-
-    // Export
+    
     console.log('Exporting to GLB...');
     const exporter = new GLTFExporter();
-    exporter.parse(
-      scene,
-      (gltf) => {
+    exporter.parse(scene, async (gltf) => {
         try {
-          console.log('Export completed. gltf length:', gltf.byteLength || 'N/A');
-          fs.writeFileSync(filepath, Buffer.from(gltf));
-          console.log('File written');
-          const serverUrl = `https://pzgj4j-3000.csb.app`; 
-          const uri = `${serverUrl}/temp/${filename}`;
-          res.json({ uri });
-        } catch (writeError) {
-          console.error('Write error:', writeError);
-          res.status(500).json({ error: 'Failed to write GLB' });
+          console.log('Export completed. Uploading to Vercel Blob...');
+          const filename = generateUniqueFilename(text); // <-- FIX #2: Function is now defined
+          const buffer = Buffer.from(gltf);
+
+          const blob = await put(filename, buffer, { access: 'public' });
+          
+          console.log('File uploaded. URL:', blob.url);
+          res.json({ uri: blob.url }); // <-- FIX #1: Use blob.url
+        } catch (uploadError) {
+          console.error('Upload error:', uploadError);
+          res.status(500).json({ error: 'Failed to upload GLB file' });
         }
       },
       (error) => {
-        console.error('Export error:', error);
+        console.error('GLTF Export error:', error);
         res.status(500).json({ error: 'GLTF export failed' });
       },
-      { binary: true}  
+      { binary: true }
     );
-
   } catch (error) {
-    console.error('Error:', error);
-    res.status(500).json({ error: 'Server error' });
+    console.error('Overall Error:', error);
+    res.status(500).json({ error: 'Server error during generation' });
   }
 });
 
+// Serve the student viewer and status page (optional, but good for testing)
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+app.get('/status', (req, res) => res.status(200).json({ status: 'ok' }));
 
-app.get('/list-files', (req, res) => {
-  fs.readdir(TEMP_DIR, (err, files) => {
-    if (err) {
-      console.error("Could not list the directory.", err);
-      return res.status(500).json({ error: 'Failed to list files' });
-    }
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 
-    // Filter the list to only include .glb files
-    const glbFiles = files.filter(file => path.extname(file).toLowerCase() === '.glb');
-    
-    res.json(glbFiles);
-  });
-});
-
-
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
-});
-
-app.get('/status', (req, res) => {
-  res.status(200).json({
-    status: 'ok',
-    message: 'Server is running.',
-    startTime: serverStartTime.toISOString() // Send start time as a standard ISO string
-  });
-});
-
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
-
-
-
-
+// Export the app for Vercel
+export default app;
