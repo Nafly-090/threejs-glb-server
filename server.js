@@ -18,12 +18,12 @@ import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
 
 // --- HELPER FUNCTION FOR UNIQUE FILENAMES ---
-// function generateUniqueFilename(text) {
-//   const sanitizedText = text.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-//   const hash = randomBytes(4).toString('hex');
-//   const shortText = sanitizedText.substring(0, 30);
-//   return `label.glb`;
-// }
+function generateUniqueFilename(text) {
+  const sanitizedText = text.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  const hash = randomBytes(4).toString('hex');
+  const shortText = sanitizedText.substring(0, 30);
+  return `label-${shortText}-${hash}.glb`;
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -84,28 +84,45 @@ app.post('/generate-text', async (req, res) => {
     console.log('Exporting to GLB...');
     const exporter = new GLTFExporter();
     exporter.parse(scene, async (gltf) => {
-        try {
-          console.log('Export completed. Uploading to Vercel Blob...');
-          const filename = "label.glb"; 
-          const buffer = Buffer.from(gltf);
+    try {
+      console.log('Export completed. Preparing for overwrite upload...');
+      
+      const filename = 'label.glb'; // Using a fixed filename
+      const buffer = Buffer.from(gltf);
 
-          const blob = await put(filename, buffer, {
-            access: 'public',
-            addRandomSuffix: false // Ensure the filename is not changed
-          });          
-          console.log('File uploaded. URL:', blob.url);
-          res.json({ uri: blob.url }); 
-        } catch (uploadError) {
-          console.error('Upload error:', uploadError);
-          res.status(500).json({ error: 'Failed to upload GLB file' });
-        }
-      },
-      (error) => {
-        console.error('GLTF Export error:', error);
-        res.status(500).json({ error: 'GLTF export failed' });
-      },
-      { binary: true }
-    );
+      // --- DEBUGGING LOG ---
+      // Let's check if the environment variable is actually available to our function
+      const token = process.env.BLOB_READ_WRITE_TOKEN;
+      console.log("Checking for Blob Token:", token ? "Token Found!" : "!!! TOKEN IS MISSING OR UNDEFINED !!!");
+      // ---------------------
+g
+      if (!token) {
+        // If the token is missing, throw a clear error.
+        throw new Error("BLOB_READ_WRITE_TOKEN environment variable not found.");
+      }
+
+      // Re-add the token to the put options
+      const blob = await put(filename, buffer, {
+        access: 'public',
+        addRandomSuffix: false, // Ensure the filename is not changed
+        token: token // Provide the token to allow overwriting
+      });
+      
+      console.log('File overwritten on Vercel Blob:', blob.url);
+      res.json({ uri: blob.url });
+
+    } catch (uploadError) {
+      console.error('Upload or write error:', uploadError);
+      // Send back the actual error message for better debugging
+      res.status(500).json({ error: `Failed to upload/overwrite GLB file: ${uploadError.message}` });
+    }
+  },
+  (error) => {
+    console.error('GLTF Export error:', error);
+    res.status(500).json({ error: `GLTF export failed: ${error.message}` });
+  },
+  { binary: true }
+);
   } catch (error) {
     console.error('Overall Error:', error);
     res.status(500).json({ error: 'Server error during generation' });

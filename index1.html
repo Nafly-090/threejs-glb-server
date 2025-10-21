@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR Text Viewer</title>
+    
+    <!-- Google's <model-viewer> component -->
+    <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
+
+    <style>
+        :root {
+            --sidebar-width: 280px;
+            --header-height: 60px;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f0f2f5;
+            color: #333;
+            overflow: hidden; /* Prevent body scroll */
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        #sidebar {
+            width: var(--sidebar-width);
+            flex-shrink: 0;
+            background-color: #ffffff;
+            border-right: 1px solid #ddd;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-header {
+            height: var(--header-height);
+            padding: 0 20px;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .sidebar-header h2 {
+            margin: 0;
+            font-size: 1.2rem;
+            color: #1c1e21;
+        }
+        
+        #file-list-container {
+            overflow-y: auto;
+            flex-grow: 1;
+        }
+
+        #file-list {
+            list-style: none;
+            padding: 10px 0;
+            margin: 0;
+        }
+
+        #file-list li {
+            padding: 12px 20px;
+            cursor: pointer;
+            border-bottom: 1px solid #eee;
+            transition: background-color 0.2s ease;
+            font-size: 0.95rem;
+        }
+
+        #file-list li:hover {
+            background-color: #f5f5f5;
+        }
+
+        #file-list li.active {
+            background-color: #e7f3ff;
+            color: #1b74e4;
+            font-weight: 600;
+        }
+
+        #viewer-container {
+            flex-grow: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        
+        #viewer-placeholder {
+            text-align: center;
+            color: #888;
+        }
+        
+        #viewer-placeholder h3 {
+            margin-bottom: 10px;
+        }
+
+        model-viewer {
+            width: 100%;
+            height: 100%;
+            border: none;
+            border-radius: 8px;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <aside id="sidebar">
+            <div class="sidebar-header">
+                <h2>Available Models</h2>
+            </div>
+            <div id="file-list-container">
+                <ul id="file-list">
+                    <!-- File list will be populated here by JavaScript -->
+                </ul>
+            </div>
+        </aside>
+
+        <main id="viewer-container">
+            <div id="viewer-placeholder">
+                <h3>Welcome!</h3>
+                <p>Select a model from the sidebar to view it here.</p>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const fileList = document.getElementById('file-list');
+            const viewerContainer = document.getElementById('viewer-container');
+            let activeListItem = null;
+
+            async function fetchAndDisplayFiles() {
+                try {
+                    const response = await fetch('/list-files');
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    const files = await response.json();
+                    
+                    fileList.innerHTML = ''; // Clear previous list
+
+                    if (files.length === 0) {
+                        fileList.innerHTML = '<li>No models found in /temp folder.</li>';
+                        return;
+                    }
+
+                    files.forEach(filename => {
+                        const li = document.createElement('li');
+                        li.textContent = filename;
+                        // Store the full URL in a data attribute for easy access
+                        li.dataset.url = `/temp/${filename}`;
+                        
+                        li.addEventListener('click', () => {
+                            // Update active state in sidebar
+                            if (activeListItem) {
+                                activeListItem.classList.remove('active');
+                            }
+                            li.classList.add('active');
+                            activeListItem = li;
+
+                            // Load the model
+                            loadModel(li.dataset.url, filename);
+                        });
+                        
+                        fileList.appendChild(li);
+                    });
+
+                } catch (error) {
+                    console.error('Failed to fetch file list:', error);
+                    fileList.innerHTML = '<li>Error loading models.</li>';
+                }
+            }
+
+            function loadModel(url, altText) {
+                // Clear the placeholder/previous model
+                viewerContainer.innerHTML = '';
+
+                // Create the model-viewer element
+                const modelViewer = document.createElement('model-viewer');
+                
+                // Set its attributes
+                modelViewer.setAttribute('src', url);
+                modelViewer.setAttribute('alt', `3D model of ${altText}`);
+                modelViewer.setAttribute('ar', ''); // Enable AR
+                modelViewer.setAttribute('camera-controls', ''); // Allow user to rotate/pan/zoom
+                modelViewer.setAttribute('auto-rotate', ''); // Start with a gentle rotation
+                modelViewer.setAttribute('environment-image', 'neutral'); // Good lighting
+                modelViewer.setAttribute('shadow-intensity', '1');
+                
+                // Add the new element to the DOM
+                viewerContainer.appendChild(modelViewer);
+            }
+
+            // Initial load of the file list
+            fetchAndDisplayFiles();
+        });
+    </script>
+
+</body>
+</html>
+
+
+<!-- 
+import express from 'express';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import cors from 'cors'; 
+import { put } from '@vercel/blob';
+
+
+
+// vblob polyfill FIRST (before Three.js)
+import { Blob, FileReader } from 'vblob';
+globalThis.Blob = Blob;
+globalThis.FileReader = FileReader;
+globalThis.window = globalThis;
+
+// Import Three.js AFTER polyfills
+import * as THREE from 'three';
+import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js';
+import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js';
+import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const app = express();
+app.use(cors()); // <-- ADD THIS LINE. This enables CORS for all routes.
+const PORT = process.env.PORT || 3000; // Use environment port or 3000
+const TEMP_DIR = path.join(__dirname, 'temp');
+const serverStartTime = new Date();
+
+app.use(express.json());
+
+
+
+app.post('/generate-text', async (req, res) => {
+  console.log('Request received:', req.body);
+
+  const { text, depth = 0.4 ,animate = true} = req.body;  // Simplified: Only text required; depth defaults to slim 0.08
+  if (!text || typeof text !== 'string') {
+    return res.status(400).json({ error: 'Missing or invalid "text" in request body' });
+  }
+
+  try {
+    const filename = `label.glb`;
+    const filepath = path.join(TEMP_DIR, filename);
+    console.log('Starting generation for text:', text, 'depth:', depth);
+
+    if (!fs.existsSync(TEMP_DIR)) {
+      fs.mkdirSync(TEMP_DIR, { recursive: true });
+    }
+
+    // Load font
+    console.log('Fetching font...');
+    const fontUrl = 'https://threejs.org/examples/fonts/helvetiker_regular.typeface.json';
+    let font;
+    try {
+      const response = await fetch(fontUrl);
+      if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      const fontData = await response.json();
+      const loader = new FontLoader();
+      font = loader.parse(fontData);
+      console.log('Font created successfully');
+    } catch (fontError) {
+      console.error('Font loading error:', fontError);
+      throw new Error(`Font failed: ${fontError.message}`);
+    }
+
+    // Create geometry
+    console.log('Creating geometry...');
+    const scene = new THREE.Scene();
+    const geometry = new TextGeometry(text, {
+      font: font,
+      size: 0.8,
+      depth: depth,  // Slim extrusion for clean 3D
+      curveSegments: 20,
+      bevelEnabled: true,
+      bevelThickness: 0.025,  // Enhanced: Crisper edges for attractiveness
+      bevelSize: 0.025,
+      bevelOffset: 0,
+      bevelSegments: 5
+    });
+    console.log('Geometry created with depth:', depth);
+
+    // Center geometry
+    geometry.computeBoundingBox();
+    const boundingBox = geometry.boundingBox;
+    const centerOffsetX = -0.5 * (boundingBox.max.x - boundingBox.min.x);
+    const centerOffsetY = -0.5 * (boundingBox.max.y - boundingBox.min.y);
+    geometry.translate(centerOffsetX, centerOffsetY, 0);
+    console.log('Geometry centered');
+
+    // Enhanced material: Added emissive for subtle glow
+    const material = new THREE.MeshStandardMaterial({
+      color: 0x4a90e2,  // Vibrant blue
+      emissive: 0x4a90e2,  // Soft inner glow
+      emissiveIntensity: 0.2,  // Subtle, not overwhelming
+      roughness: 0.3,
+      metalness: 0.4  // Higher for metallic sheen
+    });
+
+    // Mesh with auto-scale for consistent visibility (based on text length)
+    const textMesh = new THREE.Mesh(geometry, material);
+    textMesh.name = 'AnimatedText'; // <-- ADD THIS LINE
+    const textLength = text.length;
+    textMesh.scale.setScalar(1 / Math.sqrt(textLength / 10 + 1));  // Slight scale down for longer text
+    scene.add(textMesh);
+    console.log('Mesh added with scale');
+
+    // Enhanced lights: Added side light for highlights/depth
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);  // Soft fill
+    scene.add(ambientLight);
+    const directionalLight1 = new THREE.DirectionalLight(0xffffff, 0.6);  // Front key
+    directionalLight1.position.set(1, 1, 1);
+    scene.add(directionalLight1);
+    const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.3);  // Side highlight
+    directionalLight2.position.set(-1, 0.5, 0.5);
+    scene.add(directionalLight2);
+
+
+
+    let animations = [];
+    if (animate) {
+      console.log('Creating animation...');
+
+      // 1. Create the keyframes for a full 360-degree rotation.
+      const rotation_times = [0, 30]; // Start at 0 seconds, end at 10 seconds
+      const rotation_values = [
+          0, 0, 0, 1, // Quaternion for 0 degrees (x, y, z, w)
+          0, 1, 0, 0  // Quaternion for 360 degrees (this will be normalized by three.js)
+      ];
+      
+      // To be precise, let's build it from Euler angles
+      const startQuaternion = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, 0));
+      const endQuaternion = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI * 2, 0));
+      
+      const quaternion_values = [
+          ...startQuaternion.toArray(),
+          ...endQuaternion.toArray()
+      ];
+
+      // 2. Create a track that targets the mesh's quaternion property.
+      //    The track name is now LOCAL ('.quaternion') because it will be
+      //    part of the mesh itself.
+      const track = new THREE.QuaternionKeyframeTrack(
+          '.quaternion',
+          rotation_times,
+          quaternion_values
+      );
+
+      // 3. Create the clip containing the track.
+      const clip = new THREE.AnimationClip('rotate', -1, [track]);
+
+      // 4. THIS IS THE KEY STEP: Attach the clip to the mesh's animations array.
+      textMesh.animations.push(clip);
+
+      console.log('Animation clip created and attached to mesh');
+    }
+
+  
+
+
+
+    // Export
+    console.log('Exporting to GLB...');
+    const exporter = new GLTFExporter();
+    exporter.parse(
+      scene,
+      async (gltf) => {
+        try {
+          console.log('Export completed. Preparing for upload...');
+          //fs.writeFileSync(filepath, Buffer.from(gltf));
+          //console.log('File written');
+          //const serverUrl = `https://pzgj4j-3000.csb.app`; 
+          //const uri = `${serverUrl}/temp/${filename}`;
+
+          // NEW WAY (USING VERCEL BLOB):
+          const filename = generateUniqueFilename(text); // Your existing function is great
+          const buffer = Buffer.from(gltf);
+
+          // Upload the file buffer to Vercel Blob
+          const blob = await put(filename, buffer, {
+            access: 'public', // Make the file publicly accessible
+          });
+          console.log('File uploaded to Vercel Blob:', blob.url);
+           res.json({ uri });
+
+        } catch (uploadError) {
+          console.error('Upload or write error:', uploadError);
+          res.status(500).json({ error: 'Failed to upload GLB file' });
+
+        }
+      },
+      (error) => {
+        console.error('Export error:', error);
+        res.status(500).json({ error: 'GLTF export failed' });
+      },
+      { binary: true}  
+    );
+
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+
+app.get('/list-files', (req, res) => {
+  fs.readdir(TEMP_DIR, (err, files) => {
+    if (err) {
+      console.error("Could not list the directory.", err);
+      return res.status(500).json({ error: 'Failed to list files' });
+    }
+
+    // Filter the list to only include .glb files
+    const glbFiles = files.filter(file => path.extname(file).toLowerCase() === '.glb');
+    
+    res.json(glbFiles);
+  });
+});
+
+
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+app.get('/status', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    message: 'Server is running.',
+    startTime: serverStartTime.toISOString() // Send start time as a standard ISO string
+  });
+});
+
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});
+
+
+
+ -->
