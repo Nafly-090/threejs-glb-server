@@ -10,6 +10,7 @@ import { Blob, FileReader } from 'vblob';
 globalThis.Blob = Blob;
 globalThis.FileReader = FileReader;
 globalThis.window = globalThis;
+globalThis.self = globalThis; // <-- ADD THIS LINE
 
 // Three.js imports
 import * as THREE from 'three';
@@ -84,45 +85,32 @@ app.post('/generate-text', async (req, res) => {
     console.log('Exporting to GLB...');
     const exporter = new GLTFExporter();
     exporter.parse(scene, async (gltf) => {
-    try {
-      console.log('Export completed. Preparing for overwrite upload...');
-      
-      const filename = 'label.glb'; // Using a fixed filename
-      const buffer = Buffer.from(gltf);
+        try {
+          console.log('Export completed. Uploading to Vercel Blob...');
+  
+          const filename = 'label.glb';
+          const buffer = Buffer.from(gltf);
 
-      // --- DEBUGGING LOG ---
-      // Let's check if the environment variable is actually available to our function
-      const token = process.env.BLOB_READ_WRITE_TOKEN;
-      console.log("Checking for Blob Token:", token ? "Token Found!" : "!!! TOKEN IS MISSING OR UNDEFINED !!!");
-      // ---------------------
-g
-      if (!token) {
-        // If the token is missing, throw a clear error.
-        throw new Error("BLOB_READ_WRITE_TOKEN environment variable not found.");
-      }
+          const blob = await put(filename, buffer, {
+            access: 'public',
+            addRandomSuffix: false,
+            token: process.env.BLOB_READ_WRITE_TOKEN
+          });
+          
+          console.log('File overwritten on Vercel Blob:', blob.url);
+          res.json({ uri: blob.url });
 
-      // Re-add the token to the put options
-      const blob = await put(filename, buffer, {
-        access: 'public',
-        addRandomSuffix: false, // Ensure the filename is not changed
-        token: token // Provide the token to allow overwriting
-      });
-      
-      console.log('File overwritten on Vercel Blob:', blob.url);
-      res.json({ uri: blob.url });
-
-    } catch (uploadError) {
-      console.error('Upload or write error:', uploadError);
-      // Send back the actual error message for better debugging
-      res.status(500).json({ error: `Failed to upload/overwrite GLB file: ${uploadError.message}` });
-    }
-  },
-  (error) => {
-    console.error('GLTF Export error:', error);
-    res.status(500).json({ error: `GLTF export failed: ${error.message}` });
-  },
-  { binary: true }
-);
+        } catch (uploadError) {
+          console.error('Upload error:', uploadError);
+          res.status(500).json({ error: 'Failed to upload/overwrite GLB file' });
+        }
+      },
+      (error) => {
+        console.error('GLTF Export error:', error);
+        res.status(500).json({ error: 'GLTF export failed' });
+      },
+      { binary: true }
+    );
   } catch (error) {
     console.error('Overall Error:', error);
     res.status(500).json({ error: 'Server error during generation' });
