@@ -94,7 +94,7 @@ app.post('/generate-text', async (req, res) => {
           const blob = await put(filename, buffer, {
             access: 'public',
             addRandomSuffix: false,
-            token: process.env.BLOB_READ_WRITE_TOKEN
+            allowOverwrite: true
           });
           
           console.log('File overwritten on Vercel Blob:', blob.url);
